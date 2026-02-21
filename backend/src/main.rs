@@ -180,8 +180,6 @@ async fn main() {
         // Bans
         .route("/api/bans", get(handlers::ban::list_bans).post(handlers::ban::create_ban))
         .route("/api/bans/:id", axum::routing::put(handlers::ban::update_ban).delete(handlers::ban::delete_ban))
-        .route("/api/check_ban", get(handlers::ban::check_ban))
-        .route("/api/check_global_ban", get(handlers::ban::check_global_ban))
         .route("/api/check_global_ban/bulk", post(handlers::ban::check_global_ban_bulk))
         // Logs
         .route("/api/logs", get(handlers::log::list_logs).post(handlers::log::create_log))
@@ -220,6 +218,8 @@ async fn main() {
         .route("/api/whitelist/status", get(handlers::whitelist::get_whitelist_status))
         .route("/api/whitelist/player-info", get(handlers::whitelist::get_player_info))
         .route("/api/bans/public", get(handlers::ban::list_public_bans))
+        .route("/api/check_ban", get(handlers::ban::check_ban))
+        .route("/api/check_global_ban", get(handlers::ban::check_global_ban))
         .merge(protected_routes)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(TraceLayer::new_for_http())

@@ -20,6 +20,9 @@ type ServerInfo = {
     port: number;
     rcon_password?: string;
     verification_enabled: boolean;
+    required_rating: number;
+    required_level: number;
+    whitelist_only: boolean;
     status?: string;
 };
 
@@ -53,6 +56,9 @@ export default function CommunityManagementPage() {
         port: 27015,
         rcon_password: '',
         verification_enabled: false,
+        required_rating: 3.0,
+        required_level: 1,
+        whitelist_only: false,
     });
 
     const [isManageServerOpen, setIsManageServerOpen] = useState(false);
@@ -165,7 +171,7 @@ export default function CommunityManagementPage() {
     };
 
     const openCreateServer = (groupId: number) => {
-        setServerForm({ ...serverForm, group_id: groupId, name: '', ip: '', port: 27015, rcon_password: '' });
+        setServerForm({ ...serverForm, group_id: groupId, name: '', ip: '', port: 27015, rcon_password: '', verification_enabled: false, required_rating: 3.0, required_level: 1, whitelist_only: false });
         setIsCreateServerOpen(true);
     };
 
@@ -454,15 +460,57 @@ export default function CommunityManagementPage() {
                             <Input type="password" value={serverForm.rcon_password} onChange={(e) => setServerForm({ ...serverForm, rcon_password: e.target.value })} />
                             <p className="text-xs text-slate-500">添加服务器前系统将通过RCON尝试连接服务器以验证连通性。</p>
                         </div>
-                        <div className="flex items-center gap-2 mt-2">
-                            <input
-                                type="checkbox"
-                                id="verifyEn"
-                                checked={serverForm.verification_enabled}
-                                onChange={(e) => setServerForm({ ...serverForm, verification_enabled: e.target.checked })}
-                                className="w-4 h-4"
-                            />
-                            <Label htmlFor="verifyEn">启用进服前验证 (Shield)</Label>
+                        <div className="flex flex-col gap-3 mt-4 border-t pt-4">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="verifyEn"
+                                    checked={serverForm.verification_enabled}
+                                    onChange={(e) => setServerForm({ ...serverForm, verification_enabled: e.target.checked })}
+                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <Label htmlFor="verifyEn" className="font-medium">启用进服前验证 (Shield)</Label>
+                            </div>
+
+                            {serverForm.verification_enabled && (
+                                <div className="pl-6 space-y-4 border-l-2 border-slate-200 dark:border-slate-800 ml-2 mt-2">
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id="whitelistOnly"
+                                            checked={serverForm.whitelist_only}
+                                            onChange={(e) => setServerForm({ ...serverForm, whitelist_only: e.target.checked })}
+                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <Label htmlFor="whitelistOnly" className="text-sm font-medium">仅限白名单进入</Label>
+                                    </div>
+                                    <p className="text-xs text-slate-500 ml-6 -mt-3">开启后进服不检测Rating和Level，只有在白名单内的玩家才能进入。</p>
+
+                                    {!serverForm.whitelist_only && (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid gap-2">
+                                                <Label className="text-sm">进入所需最低 Rating</Label>
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    value={serverForm.required_rating}
+                                                    onChange={(e) => setServerForm({ ...serverForm, required_rating: parseFloat(e.target.value) || 0 })}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-sm">进入所需最低 Steam 等级</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={serverForm.required_level}
+                                                    onChange={(e) => setServerForm({ ...serverForm, required_level: parseInt(e.target.value) || 0 })}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                     <DialogFooter>
@@ -506,14 +554,57 @@ export default function CommunityManagementPage() {
                                 <Label>RCON 密码</Label>
                                 <Input type="password" value={editForm.rcon_password || ''} placeholder="留空则不修改现有的密码" onChange={(e) => setEditForm({ ...editForm, rcon_password: e.target.value })} />
                             </div>
-                            <div className="flex items-center gap-2 mt-2">
-                                <input
-                                    type="checkbox"
-                                    checked={editForm.verification_enabled}
-                                    onChange={(e) => setEditForm({ ...editForm, verification_enabled: e.target.checked })}
-                                    className="w-4 h-4"
-                                />
-                                <Label>启用进服前验证 (Shield)</Label>
+                            <div className="flex flex-col gap-3 mt-4 border-t pt-4">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="editVerifyEn"
+                                        checked={editForm.verification_enabled || false}
+                                        onChange={(e) => setEditForm({ ...editForm, verification_enabled: e.target.checked })}
+                                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <Label htmlFor="editVerifyEn" className="font-medium">启用进服前验证 (Shield)</Label>
+                                </div>
+
+                                {editForm.verification_enabled && (
+                                    <div className="pl-6 space-y-4 border-l-2 border-slate-200 dark:border-slate-800 ml-2 mt-2">
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                id="editWhitelistOnly"
+                                                checked={editForm.whitelist_only || false}
+                                                onChange={(e) => setEditForm({ ...editForm, whitelist_only: e.target.checked })}
+                                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <Label htmlFor="editWhitelistOnly" className="text-sm font-medium">仅限白名单进入</Label>
+                                        </div>
+                                        <p className="text-xs text-slate-500 ml-6 -mt-3">开启后进服不检测Rating和Level，只有在白名单内的玩家才能进入。</p>
+
+                                        {!editForm.whitelist_only && (
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid gap-2">
+                                                    <Label className="text-sm">最低 Rating</Label>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.1"
+                                                        value={editForm.required_rating !== undefined ? editForm.required_rating : 3.0}
+                                                        onChange={(e) => setEditForm({ ...editForm, required_rating: parseFloat(e.target.value) || 0 })}
+                                                        className="w-full"
+                                                    />
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label className="text-sm">最低 Steam 等级</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={editForm.required_level !== undefined ? editForm.required_level : 1}
+                                                        onChange={(e) => setEditForm({ ...editForm, required_level: parseInt(e.target.value) || 0 })}
+                                                        className="w-full"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div className="flex justify-end mt-4">
                                 <Button onClick={handleUpdateServer}>保存设置</Button>

@@ -21,6 +21,12 @@ pub struct Server {
     pub created_at: Option<DateTime<Utc>>,
     #[sqlx(default)]
     pub verification_enabled: bool,
+    #[sqlx(default)]
+    pub required_rating: Option<f64>,
+    #[sqlx(default)]
+    pub required_level: Option<i32>,
+    #[sqlx(default)]
+    pub whitelist_only: Option<bool>,
 }
 
 // Responses often group servers by group
@@ -44,6 +50,9 @@ pub struct CreateServerRequest {
     pub port: i32,
     pub rcon_password: Option<String>,
     pub verification_enabled: Option<bool>,
+    pub required_rating: Option<f64>,
+    pub required_level: Option<i32>,
+    pub whitelist_only: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -53,6 +62,9 @@ pub struct UpdateServerRequest {
     pub port: Option<i32>,
     pub rcon_password: Option<String>,
     pub verification_enabled: Option<bool>,
+    pub required_rating: Option<f64>,
+    pub required_level: Option<i32>,
+    pub whitelist_only: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

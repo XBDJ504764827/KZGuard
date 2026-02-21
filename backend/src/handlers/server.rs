@@ -54,6 +54,9 @@ pub async fn list_server_groups(
                 rcon_password: s.rcon_password.clone(),
                 created_at: s.created_at,
                 verification_enabled: s.verification_enabled,
+                required_rating: s.required_rating,
+                required_level: s.required_level,
+                whitelist_only: s.whitelist_only,
             })
             .collect();
 
@@ -149,7 +152,7 @@ pub async fn create_server(
     Json(payload): Json<CreateServerRequest>,
 ) -> impl IntoResponse {
     let result = sqlx::query(
-        "INSERT INTO servers (group_id, name, ip, port, rcon_password, verification_enabled) VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO servers (group_id, name, ip, port, rcon_password, verification_enabled, required_rating, required_level, whitelist_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(payload.group_id)
     .bind(&payload.name)
@@ -157,6 +160,9 @@ pub async fn create_server(
     .bind(payload.port)
     .bind(&payload.rcon_password)
     .bind(payload.verification_enabled.unwrap_or(true))
+    .bind(payload.required_rating.unwrap_or(3.0))
+    .bind(payload.required_level.unwrap_or(1))
+    .bind(payload.whitelist_only.unwrap_or(false))
     .execute(&state.db)
     .await;
 
@@ -198,11 +204,20 @@ pub async fn update_server(
     if let Some(port) = payload.port {
         let _ = sqlx::query("UPDATE servers SET port = ? WHERE id = ?").bind(port).bind(id).execute(&state.db).await;
     }
-     if let Some(pwd) = payload.rcon_password {
+    if let Some(pwd) = payload.rcon_password {
         let _ = sqlx::query("UPDATE servers SET rcon_password = ? WHERE id = ?").bind(pwd).bind(id).execute(&state.db).await;
     }
     if let Some(verif) = payload.verification_enabled {
         let _ = sqlx::query("UPDATE servers SET verification_enabled = ? WHERE id = ?").bind(verif).bind(id).execute(&state.db).await;
+    }
+    if let Some(rating) = payload.required_rating {
+        let _ = sqlx::query("UPDATE servers SET required_rating = ? WHERE id = ?").bind(rating).bind(id).execute(&state.db).await;
+    }
+    if let Some(level) = payload.required_level {
+        let _ = sqlx::query("UPDATE servers SET required_level = ? WHERE id = ?").bind(level).bind(id).execute(&state.db).await;
+    }
+    if let Some(whitelist) = payload.whitelist_only {
+        let _ = sqlx::query("UPDATE servers SET whitelist_only = ? WHERE id = ?").bind(whitelist).bind(id).execute(&state.db).await;
     }
 
      let _ = log_admin_action(&state.db, &user.sub, "update_server", &format!("ID: {}", id), "Updated server").await;

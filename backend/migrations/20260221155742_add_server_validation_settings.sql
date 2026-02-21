@@ -1,0 +1,4 @@
+ALTER TABLE servers
+ADD COLUMN required_rating FLOAT DEFAULT 3.0,
+ADD COLUMN required_level INT DEFAULT 1,
+ADD COLUMN whitelist_only BOOLEAN DEFAULT FALSE;
