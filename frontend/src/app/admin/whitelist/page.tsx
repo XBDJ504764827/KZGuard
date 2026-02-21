@@ -54,7 +54,6 @@ export default function WhitelistPage() {
     const [newName, setNewName] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
 
-    const [isApproveAllOpen, setIsApproveAllOpen] = useState(false);
     const [removeId, setRemoveId] = useState<number | null>(null);
 
     // Reject Dialog State
@@ -197,32 +196,6 @@ export default function WhitelistPage() {
         } finally {
             setIsVerifying(false);
         }
-    };
-
-    const submitApproveAll = async () => {
-        const pendingList = whitelist.filter(u => u.status === 'pending');
-        let count = 0;
-        for (const user of pendingList) {
-            try {
-                const res = await apiFetch(`/api/whitelist/${user.id}/approve`, { method: 'PUT' });
-                if (res.ok) count++;
-            } catch (error) {
-                console.error(error);
-            }
-        }
-
-        toast.success(`成功通过了 ${count} 个白名单申请`);
-        setIsApproveAllOpen(false);
-        fetchWhitelist();
-    };
-
-    const handleApproveAllClick = () => {
-        const pendingList = whitelist.filter(u => u.status === 'pending');
-        if (pendingList.length === 0) {
-            toast.info('没有待审核的白名单申请');
-            return;
-        }
-        setIsApproveAllOpen(true);
     };
 
     const handleAction = async (id: number, action: 'approve' | 'reject', providedReason = '') => {
@@ -456,10 +429,6 @@ export default function WhitelistPage() {
                     <p className="text-slate-500 dark:text-slate-400">处理玩家的白名单申请与现有白名单用户管理。</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button onClick={handleApproveAllClick} variant="outline" className="shrink-0">
-                        <FileCheck className="mr-2 h-4 w-4 text-emerald-500" />
-                        一键审核所有
-                    </Button>
                     <Button onClick={() => setIsAddOpen(true)} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/20">
                         <UserPlus className="mr-2 h-4 w-4" />
                         添加白名单
@@ -550,22 +519,6 @@ export default function WhitelistPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-
-            {/* Approve All Dialog */}
-            <AlertDialog open={isApproveAllOpen} onOpenChange={setIsApproveAllOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>确认一键审核所有？</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            此操作将把当前处于“待审核”状态的所有白名单申请批量标记为“已通过”。
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setIsApproveAllOpen(false)}>取消</AlertDialogCancel>
-                        <AlertDialogAction onClick={submitApproveAll} className="bg-emerald-600 hover:bg-emerald-700 text-white">确认通过</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
 
             {/* Remove Entry Dialog */}
             <AlertDialog open={removeId !== null} onOpenChange={(open) => !open && setRemoveId(null)}>
