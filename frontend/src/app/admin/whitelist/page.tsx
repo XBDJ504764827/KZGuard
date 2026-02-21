@@ -301,7 +301,7 @@ export default function WhitelistPage() {
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="font-semibold text-slate-900 dark:text-white">{user.name}</span>
                                             {user.ban_record && (
-                                                <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider">
+                                                <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-purple-600 hover:bg-purple-700 border-purple-600">
                                                     Local Banned
                                                 </Badge>
                                             )}
@@ -343,7 +343,7 @@ export default function WhitelistPage() {
 
                                         {/* Display Local Ban details if present */}
                                         {user.ban_record && (
-                                            <div className="mt-1 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs text-red-800 dark:text-red-300">
+                                            <div className="mt-1 p-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md text-xs text-purple-800 dark:text-purple-300">
                                                 <p className="font-semibold mb-0.5">Local Ban Record:</p>
                                                 <div>
                                                     <span className="opacity-80">Reason: </span>
