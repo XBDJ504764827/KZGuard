@@ -217,7 +217,7 @@ pub async fn send_command(address: &str, password: &str, command: &str) -> Resul
                  // Size = ID(4)+Type(4)+Body(N)+Null(1)+Null(1) = 10+N.
                  // So BodyLen = Size - 10.
                  
-                 let body_len_to_read = if size >= 10 { size - 10 } else { 0 };
+                 let body_len_to_read = size.saturating_sub(10);
                  
                  let start = cursor.position() as usize;
                  let end = start + body_len_to_read;
@@ -241,7 +241,7 @@ pub async fn send_command(address: &str, password: &str, command: &str) -> Resul
                 // RCON is tricky. Usually we wait for a specific ID packet we send as a marker, 
                 // but let's just return what we have after a short shake.
                 // For `status`, it usually fits or comes fast.
-                if response_data.len() > 0 {
+                if !response_data.is_empty() {
                     // Let's give it a tiny bit more time to see if more comes, or break?
                     // Simpler: Just break if we got data (NOT ROBUST for huge lists but ok for now)
                     // Better: loop again?

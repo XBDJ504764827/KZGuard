@@ -124,7 +124,7 @@ async fn check_all_servers(state: &Arc<AppState>) -> Result<(), Box<dyn std::err
                             .execute(&state.db)
                             .await;
 
-                            if let Ok(_) = insert_result {
+                            if insert_result.is_ok() {
                                 // Add to local cache so we don't try to ban again in this loop
                                 active_steamids.insert(steam_id.to_string());
                             }

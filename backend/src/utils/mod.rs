@@ -30,10 +30,9 @@ pub fn calculate_expires_at(duration_str: &str) -> Option<DateTime<Utc>> {
         return None;
     }
     // Handle "Until YYYY-MM-DD HH:MM" custom format if present
-    if duration_str.starts_with("Until ") {
+    if let Some(_date_str) = duration_str.strip_prefix("Until ") {
         // Simple parse attempt or frontend sends ISO? 
         // Frontend sends "Until 2026-01-01 12:00"
-        let _date_str = &duration_str[6..];
         // Naive parsing, assuming UTC or local? 
         // Let's try to parse as naive and set to UTC.
         // Actually better if frontend sends ISO8601, but we have text "Until ..."
@@ -45,11 +44,7 @@ pub fn calculate_expires_at(duration_str: &str) -> Option<DateTime<Utc>> {
         return None; 
     }
 
-    if let Some(duration) = parse_duration(duration_str) {
-        Some(Utc::now() + duration)
-    } else {
-        None
-    }
+    parse_duration(duration_str).map(|duration| Utc::now() + duration)
 }
 
 pub async fn log_admin_action(

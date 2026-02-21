@@ -111,74 +111,11 @@ public void SQL_CheckVerificationEnabledCallback(Database db, DBResultSet result
     pack.WriteCell(whitelistOnly);
     pack.Reset();
 
-    // Step 1: Global Ban Check
-    CheckGlobalBan(pack);
+    // Step 1: API 检查白名单与 Rating (Removed Global Ban Check)
+    CheckWhitelistAPI(pack);
 }
 
-// ============================================
-// Step 1: Global Ban 检查
-// ============================================
 
-void CheckGlobalBan(DataPack pack)
-{
-    // 回到开头
-    pack.Reset();
-    int userid = pack.ReadCell();
-    int client = GetClientOfUserId(userid);
-    
-    if (client == 0 || !IsClientInGame(client))
-    {
-        delete pack;
-        return;
-    }
-
-    char steamId[64];
-    GetClientAuthId(client, AuthId_SteamID64, steamId, sizeof(steamId));
-    
-    char apiUrl[256];
-    g_cvApiUrl.GetString(apiUrl, sizeof(apiUrl));
-    
-    char url[512];
-    Format(url, sizeof(url), "%s/api/check_global_ban?steam_id=%s", apiUrl, steamId);
-    
-    Handle request = SteamWorks_CreateHTTPRequest(k_EHTTPMethodGET, url);
-    SteamWorks_SetHTTPRequestContextValue(request, view_as<int>(pack));
-    SteamWorks_SetHTTPCallbacks(request, OnCheckGlobalBanComplete);
-    SteamWorks_SendHTTPRequest(request);
-}
-
-public int OnCheckGlobalBanComplete(Handle request, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode, any data1)
-{
-    DataPack pack = view_as<DataPack>(data1);
-    pack.Reset();
-    int userid = pack.ReadCell();
-    int client = GetClientOfUserId(userid);
-    
-    if (bRequestSuccessful && eStatusCode == k_EHTTPStatusCode200OK)
-    {
-        if (client > 0 && IsClientInGame(client))
-        {
-            KickClient(client, "您因 GOKZ Global Ban 而被禁止访问本服。");
-            LogMessage("Kicked player %N (Global Banned)", client);
-        }
-        delete pack;
-    }
-    else
-    {
-        if (client > 0 && IsClientInGame(client))
-        {
-            pack.Reset();
-            CheckWhitelistAPI(pack);
-        }
-        else
-        {
-            delete pack;
-        }
-    }
-    
-    delete request;
-    return 0;
-}
 
 // ============================================
 // Step 2: API 检查白名单与 Rating
@@ -287,7 +224,8 @@ public int OnCheckWhitelistAPIComplete(Handle request, bool bFailure, bool bRequ
     }
     else
     {
-        KickClient(client, "与白名单服务器通信失败。");
+        LogError("Whitelist API request failed for %N. bFailure: %d, eStatusCode: %d", client, bFailure, eStatusCode);
+        KickClient(client, "与白名单服务器通信失败。请联系管理员。");
     }
     
     delete pack;

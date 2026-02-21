@@ -74,9 +74,16 @@ export default function CommunityManagementPage() {
     const [deleteGroupId, setDeleteGroupId] = useState<number | null>(null);
     const [deleteServerId, setDeleteServerId] = useState<number | null>(null);
     const [kickPlayerUserid, setKickPlayerUserid] = useState<number | null>(null);
+    const [kickReason, setKickReason] = useState('');
+    const [isSubmittingKick, setIsSubmittingKick] = useState(false);
+
+    // Use an instantaneous ref lock to prevent duplicate clicks that bypass React's async batching
+    const isActionLocked = React.useRef(false);
 
     const [banPlayerUserid, setBanPlayerUserid] = useState<number | null>(null);
     const [banDuration, setBanDuration] = useState(0);
+    const [banReason, setBanReason] = useState('');
+    const [isSubmittingBan, setIsSubmittingBan] = useState(false);
 
     const fetchGroups = async () => {
         setLoading(true);
@@ -272,10 +279,15 @@ export default function CommunityManagementPage() {
 
     const submitKickPlayer = async () => {
         if (!activeServer || !kickPlayerUserid) return;
+        if (isActionLocked.current) return;
+        if (!kickReason.trim()) { toast.error("请输入踢出理由"); return; }
+
+        isActionLocked.current = true;
+        setIsSubmittingKick(true);
         try {
             const res = await apiFetch(`/api/servers/${activeServer.id}/kick`, {
                 method: 'POST',
-                body: JSON.stringify({ userid: kickPlayerUserid, reason: "Kicked via Web Dash" })
+                body: JSON.stringify({ userid: kickPlayerUserid, reason: kickReason.trim() })
             });
             if (res.ok) {
                 toast.success('Player kicked');
@@ -287,16 +299,24 @@ export default function CommunityManagementPage() {
             console.error(error);
             toast.error('Error kicking player');
         } finally {
+            isActionLocked.current = false;
+            setIsSubmittingKick(false);
             setKickPlayerUserid(null);
+            setKickReason('');
         }
     };
 
     const submitBanPlayer = async () => {
         if (!activeServer || !banPlayerUserid) return;
+        if (isActionLocked.current) return;
+        if (!banReason.trim()) { toast.error("请输入封禁理由"); return; }
+
+        isActionLocked.current = true;
+        setIsSubmittingBan(true);
         try {
             const res = await apiFetch(`/api/servers/${activeServer.id}/ban`, {
                 method: 'POST',
-                body: JSON.stringify({ userid: banPlayerUserid, duration: banDuration, reason: "Banned via Web Dash" })
+                body: JSON.stringify({ userid: banPlayerUserid, duration: banDuration, reason: banReason.trim() })
             });
             if (res.ok) {
                 toast.success('Player banned');
@@ -308,7 +328,10 @@ export default function CommunityManagementPage() {
             console.error(error);
             toast.error('Error banning player');
         } finally {
+            isActionLocked.current = false;
+            setIsSubmittingBan(false);
             setBanPlayerUserid(null);
+            setBanReason('');
         }
     };
 
@@ -701,29 +724,52 @@ export default function CommunityManagementPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Kick Player Alert Dialog */}
-            <AlertDialog open={kickPlayerUserid !== null} onOpenChange={(open) => !open && setKickPlayerUserid(null)}>
-                <AlertDialogContent className="z-[60]">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>确定断开此玩家的连接？</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            该玩家将会被强制踢出当前的对局。
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setKickPlayerUserid(null)}>取消</AlertDialogCancel>
-                        <AlertDialogAction onClick={submitKickPlayer} className="bg-orange-600 hover:bg-orange-700 text-white">确定踢出</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {/* Kick Player Dialog */}
+            <Dialog open={kickPlayerUserid !== null} onOpenChange={(open) => {
+                if (!open) {
+                    setKickPlayerUserid(null);
+                    setKickReason('');
+                }
+            }}>
+                <DialogContent className="sm:max-w-[425px] z-[60]">
+                    <DialogHeader>
+                        <DialogTitle>踢出玩家</DialogTitle>
+                        <DialogDescription>
+                            请输入踢出该玩家的理由。该理由将显示给被踢出的玩家。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">理由</Label>
+                            <Input
+                                value={kickReason}
+                                onChange={(e) => setKickReason(e.target.value)}
+                                className="col-span-3"
+                                placeholder="请输入踢出理由..."
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setKickPlayerUserid(null); setKickReason(''); }} disabled={isSubmittingKick}>取消</Button>
+                        <Button onClick={submitKickPlayer} disabled={!kickReason.trim() || isSubmittingKick} className="bg-orange-600 hover:bg-orange-700 text-white">
+                            {isSubmittingKick ? '踢出中...' : '确定踢出'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Ban Player Dialog */}
-            <Dialog open={banPlayerUserid !== null} onOpenChange={(open) => !open && setBanPlayerUserid(null)}>
+            <Dialog open={banPlayerUserid !== null} onOpenChange={(open) => {
+                if (!open) {
+                    setBanPlayerUserid(null);
+                    setBanReason('');
+                }
+            }}>
                 <DialogContent className="sm:max-w-[425px] z-[60]">
                     <DialogHeader>
                         <DialogTitle>封禁玩家</DialogTitle>
                         <DialogDescription>
-                            输入想封禁该玩家此时长 (单位: 分钟)。输入 0 即代表永久封禁。
+                            请输入封禁该玩家此时长 (单位: 分钟) 及理由。输入 0 即代表永久封禁。
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -734,13 +780,24 @@ export default function CommunityManagementPage() {
                                 value={banDuration}
                                 onChange={(e) => setBanDuration(parseInt(e.target.value) || 0)}
                                 className="col-span-3"
-                                placeholder="0 for permanent"
+                                placeholder="0 代表永久"
+                            />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">理由</Label>
+                            <Input
+                                value={banReason}
+                                onChange={(e) => setBanReason(e.target.value)}
+                                className="col-span-3"
+                                placeholder="请输入封禁理由..."
                             />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setBanPlayerUserid(null)}>取消</Button>
-                        <Button onClick={submitBanPlayer} className="bg-red-600 hover:bg-red-700 text-white">确定封禁</Button>
+                        <Button variant="outline" onClick={() => { setBanPlayerUserid(null); setBanReason(''); }} disabled={isSubmittingBan}>取消</Button>
+                        <Button onClick={submitBanPlayer} disabled={!banReason.trim() || isSubmittingBan} className="bg-red-600 hover:bg-red-700 text-white">
+                            {isSubmittingBan ? '封禁中...' : '确定封禁'}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

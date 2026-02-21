@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ListChecks, UserPlus, FileCheck, CheckCircle2, XCircle, Loader2, Search, SearchCode } from 'lucide-react';
+import { ListChecks, UserPlus, CheckCircle2, XCircle, Loader2, Search, SearchCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -38,8 +38,8 @@ type WhitelistUser = {
     reject_reason: string | null;
     admin_name: string | null;
     created_at: string | null;
-    ban_record?: any;
-    global_ban_record?: any;
+    ban_record?: { reason?: string } | null;
+    global_ban_record?: { data?: { ban_type?: string; server_name?: string; created_on?: string; notes?: string; stats?: string }[] } | null;
 };
 
 export default function WhitelistPage() {
@@ -85,19 +85,19 @@ export default function WhitelistPage() {
             }
 
             // Fetch ALL active bans once to avoid N+1 requests and 404 spam
-            let activeBans: any[] = [];
+            let activeBans: { steam_id?: string; steam_id_64?: string; steam_id_3?: string; status: string; reason?: string }[] = [];
             try {
                 const bansRes = await apiFetch('/api/bans');
                 if (bansRes.ok) {
                     const bansData = await bansRes.json();
-                    activeBans = bansData.filter((b: any) => b.status === 'active');
+                    activeBans = bansData.filter((b: { status: string }) => b.status === 'active');
                 }
             } catch (e) {
                 console.error('Error fetching bans list', e);
             }
 
             // Fetch Global Bans using bulk API
-            let globalBansMap: Record<string, any> = {};
+            let globalBansMap: Record<string, { data?: { ban_type?: string; server_name?: string; created_on?: string; notes?: string; stats?: string }[] }> = {};
             try {
                 const steamIds64 = combinedList
                     .map(u => u.steam_id_64)
@@ -305,7 +305,7 @@ export default function WhitelistPage() {
                                                     Local Banned
                                                 </Badge>
                                             )}
-                                            {user.global_ban_record && user.global_ban_record.data && user.global_ban_record.data.length > 0 && (
+                                            {user.global_ban_record?.data && user.global_ban_record.data.length > 0 && (
                                                 <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-red-600 hover:bg-red-700">
                                                     Global Banned
                                                 </Badge>
@@ -316,10 +316,10 @@ export default function WhitelistPage() {
                                         {user.steam_id_64 && <span className="text-xs font-mono text-slate-400">ID64: {user.steam_id_64}</span>}
 
                                         {/* Display Global Ban details if present */}
-                                        {user.global_ban_record && user.global_ban_record.data && user.global_ban_record.data.length > 0 && (
+                                        {user.global_ban_record?.data && user.global_ban_record.data.length > 0 && (
                                             <div className="mt-1 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs text-red-800 dark:text-red-300">
                                                 <p className="font-semibold mb-0.5">Global Ban Details:</p>
-                                                {user.global_ban_record.data.map((ban: any, idx: number) => (
+                                                {user.global_ban_record.data.map((ban, idx: number) => (
                                                     <div key={idx} className="mb-2 last:mb-0 border-b border-red-200/50 dark:border-red-800/50 pb-2 last:border-0 last:pb-0">
                                                         <div className="flex gap-4 mb-1">
                                                             <div><span className="opacity-70">Type:</span> <span className="font-semibold">{ban.ban_type || 'Unknown'}</span></div>

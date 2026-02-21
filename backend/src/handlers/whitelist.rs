@@ -412,10 +412,25 @@ pub async fn get_whitelist_status(
             .await
             .unwrap_or(None);
 
+        // Even if not in whitelist, we should return rating/level for the plugin's Fallback logic
+        let mut response_json = json!({
+            "status": "none"
+        });
+
         if let Some(whitelist) = record {
-            return (StatusCode::OK, Json(whitelist)).into_response();
+            response_json["status"] = json!(whitelist.status);
+            response_json["name"] = json!(whitelist.name);
+            response_json["reject_reason"] = json!(whitelist.reject_reason);
         }
+
+        let steam_level = steam_service.get_steam_level(&steam_id_64).await.unwrap_or(0);
+        let gokz_rating = steam_service.get_gokz_rating(&steam_id_64).await.unwrap_or(0.0);
+        
+        response_json["steam_level"] = json!(steam_level);
+        response_json["gokz_rating"] = json!(gokz_rating);
+
+        return (StatusCode::OK, Json(response_json)).into_response();
     }
 
-    (StatusCode::NOT_FOUND, Json(json!({ "error": "Application not found" }))).into_response()
+    (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid SteamID" }))).into_response()
 }

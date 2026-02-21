@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, ShieldBan, Trash, RefreshCw, Plus } from 'lucide-react';
+import { Search, ShieldBan, Trash, RefreshCw, Plus, User, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -287,11 +287,11 @@ export default function BanListPage() {
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-200 dark:border-slate-800">
                             <tr>
-                                <th className="px-6 py-4 whitespace-nowrap">ID / 日期</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Player Info</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Reason / Type</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Status</th>
-                                <th className="px-6 py-4 whitespace-nowrap text-right">Actions</th>
+                                <th className="px-6 py-4 whitespace-nowrap">玩家 (Player)</th>
+                                <th className="px-6 py-4 whitespace-nowrap">封禁原因 (Reason)</th>
+                                <th className="px-6 py-4 whitespace-nowrap">网络与类型 (Type & IP)</th>
+                                <th className="px-6 py-4 whitespace-nowrap">状态与时间 (Status & Time)</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-right">操作 (Actions)</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
@@ -309,48 +309,70 @@ export default function BanListPage() {
                                 </tr>
                             ) : filteredBans.map((ban) => (
                                 <tr key={ban.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                                    <td className="px-6 py-4">
-                                        <div className="font-mono text-slate-500 text-xs">#{ban.id}</div>
-                                        <div className="text-xs text-slate-400 mt-1 whitespace-nowrap">
-                                            {new Date(ban.created_at).toLocaleDateString()}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-col gap-1">
-                                            <span className="font-semibold text-slate-900 dark:text-white">{ban.name || 'Unknown'}</span>
-                                            <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
-                                                <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{ban.steam_id || 'NO_STEAM_ID'}</span>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-9 w-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                                                <User className="h-5 w-5" />
                                             </div>
-                                            {ban.ip && (
-                                                <div className="text-xs text-slate-400 font-mono mt-0.5">{ban.ip}</div>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 max-w-[200px] truncate">
-                                        <span className="text-slate-700 dark:text-slate-300 font-medium">
-                                            {ban.reason || '未提供原因'}
-                                        </span>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900 text-[10px]">
-                                                {ban.ban_type}
-                                            </Badge>
-                                            <span className="text-xs text-slate-500">
-                                                By: {ban.admin_name || 'System'}
-                                            </span>
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="font-semibold text-slate-900 dark:text-white truncate">{ban.name || 'Unknown'}</span>
+                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <span className="font-mono text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                                        {ban.steam_id || 'NO_STEAM_ID'}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-400">#{ban.id}</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="flex flex-col gap-1 items-start">
-                                            <Badge variant={ban.status === 'active' ? 'destructive' : 'secondary'} className={ban.status === 'active' ? 'bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400' : ''}>
-                                                {ban.status === 'active' ? 'Active' : 'Expired'}
+                                        <div className="flex flex-col gap-1 max-w-[240px]">
+                                            <span className="text-slate-700 dark:text-slate-300 font-medium text-sm leading-snug">
+                                                {ban.reason || '未提供具体封禁原因'}
+                                            </span>
+                                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                                                <div className="h-1 w-1 rounded-full bg-slate-300"></div>
+                                                <span>Admin: {ban.admin_name || 'System'}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col gap-1.5">
+                                            <Badge variant="outline" className={`w-fit text-[10px] px-1.5 py-0 h-4 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 ${ban.ban_type === 'ip' ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                                                {ban.ban_type.toUpperCase()}
                                             </Badge>
-                                            {ban.expires_at ? (
-                                                <span className="text-[10px] text-slate-400 mt-1">
-                                                    Exp: {new Date(ban.expires_at).toLocaleDateString()}
-                                                </span>
+                                            {ban.ip ? (
+                                                <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
+                                                    <span className="opacity-50">Addr:</span> {ban.ip}
+                                                </div>
                                             ) : (
-                                                <span className="text-[10px] text-red-500 font-bold mt-1">PERMANENT</span>
+                                                <div className="text-[10px] italic text-slate-400">No IP recorded</div>
                                             )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant={ban.status === 'active' ? 'destructive' : 'secondary'} className={`text-[10px] px-2 py-0 h-4 ${ban.status === 'active' ? 'bg-red-500/10 text-red-600 border-red-200 dark:border-red-900/50 hover:bg-red-500/10' : ''}`}>
+                                                    {ban.status === 'active' ? 'Active' : 'Expired'}
+                                                </Badge>
+                                                <div className="flex items-center text-[10px] text-slate-400">
+                                                    <Clock className="h-3 w-3 mr-1 opacity-60" />
+                                                    {new Date(ban.created_at).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                            <div className="text-[10px] text-slate-500">
+                                                {ban.expires_at ? (
+                                                    <span className="flex items-center gap-1">
+                                                        <span className="opacity-60">Expires:</span>
+                                                        <span className={ban.status === 'active' ? 'text-amber-600 dark:text-amber-500' : ''}>
+                                                            {new Date(ban.expires_at).toLocaleDateString()}
+                                                        </span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-red-500 font-semibold tracking-wider text-[9px] uppercase">Permanent Ban</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">

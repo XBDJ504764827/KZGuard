@@ -421,9 +421,9 @@ pub async fn kick_player(
     let address = format!("{}:{}", server.ip, server.port);
     let pwd = server.rcon_password.unwrap_or_default();
     
-    // Command: kickid <userid> [reason]
+    // Command: sm_kick #<userid> [reason]
     let reason = payload.reason.unwrap_or("Kicked by admin".to_string());
-    let command = format!("kickid {} \"{}\"", payload.userid, reason);
+    let command = format!("sm_kick #{} \"{}\"", payload.userid, reason);
 
     match send_command(&address, &pwd, &command).await {
         Ok(_) => {
@@ -478,47 +478,20 @@ pub async fn ban_player(
     // We need SteamID and IP to ban properly in DB
     let player_info = match send_command(&address, &pwd, "status").await {
         Ok(output) => {
-            
-            // Try to match specific userid
-            // Note: The extended regex attempts to capture IP at the end if present.
-            // Standard output: # userid slot "name" steamid time ping loss state rate adr
-            // "adr" is usually IP:Port
-            
-            // Refined Regex for full line:
-            // # 301 1 "Name" STEAM_X:Y:Z ... ... ... ... ... IP:Port
-            // Let's use a simpler approach: iterate all, find matching userid
-            
             let mut found = None;
+            let test_re = Regex::new(&format!(r#"#\s+{}\s+"#, payload.userid)).unwrap();
+            let ip_re = Regex::new(r#"#\s+\d+\s+(?:\d+\s+)?"(.+?)"\s+(\S+)\s+.*\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"#).unwrap();
+            let basic_re = Regex::new(r#"#\s+\d+\s+(?:\d+\s+)?"(.+?)"\s+(\S+)"#).unwrap();
+
             for line in output.lines() {
-                 if line.trim().starts_with("#") {
-                     let _parts: Vec<&str> = line.split_whitespace().collect();
-                     // Parts: #, userid, slot, "Name", SteamID, ...
-                     // Because Name can have spaces, splitting by whitespace is risky.
-                     // But we have Regex!
-                     // Let's use the verified regex from get_players but extend it optionally for IP
-                     
-                     // Try to parse the specific userid we are banning
-                     // Search for "# <userid> "
-                     let prefix = format!("# {} ", payload.userid);
-                     if line.contains(&prefix) {
-                         // Found our guy?
-                         // Let's rely on Regex again.
-                         // Regex: #\s+<userid>\s+\d+\s+"(.+?)"\s+(\S+)\s+.*\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:?\d*)
-                         let ip_re = Regex::new(&format!(r#"#\s+{}\s+\d+\s+"(.+?)"\s+(\S+)\s+.*\s+(\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}})"#, payload.userid)).unwrap();
-                         
-                         if let Some(cap) = ip_re.captures(line) {
-                             found = Some((cap[1].to_string(), cap[2].to_string(), cap[3].to_string()));
-                             break;
-                         } else {
-                             // Fallback if IP not found/parsed (e.g. "loopback" or weird format)
-                             // Just get Name/SteamID
-                             let basic_re = Regex::new(&format!(r#"#\s+{}\s+\d+\s+"(.+?)"\s+(\S+)"#, payload.userid)).unwrap();
-                             if let Some(cap) = basic_re.captures(line) {
-                                 found = Some((cap[1].to_string(), cap[2].to_string(), "0.0.0.0".to_string())); 
-                                 break;
-                             }
-                         }
+                 if test_re.is_match(line) {
+                     // Try to get Name, SteamID, and IP
+                     if let Some(cap) = ip_re.captures(line) {
+                         found = Some((cap[1].to_string(), cap[2].to_string(), cap[3].to_string()));
+                     } else if let Some(cap) = basic_re.captures(line) {
+                         found = Some((cap[1].to_string(), cap[2].to_string(), "0.0.0.0".to_string()));
                      }
+                     break;
                  }
             }
             found
@@ -532,55 +505,69 @@ pub async fn ban_player(
         "0.0.0.0".to_string()
     ));
 
-    // 2. Insert Ban into DB
-    let expires_at = if payload.duration > 0 {
-         Some(chrono::Utc::now() + chrono::Duration::minutes(payload.duration as i64))
-    } else {
-         None
-    };
-    
-    let ip_only = ip.split(':').next().unwrap_or(&ip).to_string();
-    let reason = payload.reason.clone().unwrap_or("Banned by admin".to_string());
-
-    tracing::info!("Attempting to insert ban for: Name={}, SteamID={}, IP={}", name, steam_id, ip_only);
-
-    let db_result = sqlx::query(
-        "INSERT INTO bans (name, steam_id, ip, ban_type, reason, duration, admin_name, expires_at, created_at, status, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'active', ?)"
-    )
-    .bind(&name)
-    .bind(&steam_id)
-    .bind(&ip_only)
-    .bind("ip") // Changed to 'ip' as requested
-    .bind(&reason)
-    .bind(payload.duration.to_string())
-    .bind(&user.sub)
-    .bind(expires_at)
-    .bind(server.id)
-    .execute(&state.db)
-    .await;
-
-    if let Err(e) = &db_result {
-        tracing::error!("Failed to insert ban into DB: {}", e);
-        // We continue to ban in game, but log error.
-        // Or should we return error? Usually we want to ensure game ban even if logging fails?
-        // But user wants logging.
-    } else {
-        tracing::info!("Ban inserted successfully");
-    }
-
-    // 3. Execute RCON Ban
-    // Command: sm_ban #<userid> <minutes|0> [reason]
+    // Execute RCON Ban IMMEDIATELY before SteamAPI which is slow
+    let reason = payload.reason.clone().unwrap_or_else(|| "Banned by admin".to_string());
     let command = format!("sm_ban #{} {} \"{}\"", payload.userid, payload.duration, reason);
-
+    
     match send_command(&address, &pwd, &command).await {
         Ok(_) => {
-             let _ = log_admin_action(
-                &state.db, 
-                &user.sub, 
-                "ban_player_rcon_db", 
-                &format!("Server: {}, UserID: {}", server.name, payload.userid), 
-                &format!("Duration: {}, Reason: {}, Player: {} ({})", payload.duration, reason, name, steam_id)
-            ).await;
+            // Background task: Resolve Steam ID, Insert to DB, Setup Logs
+            let bg_state = state.clone();
+            let bg_user_sub = user.sub.clone();
+            let bg_server_id = server.id;
+            let bg_server_name = server.name.clone();
+            let bg_duration = payload.duration;
+            let bg_userid = payload.userid;
+
+            tokio::spawn(async move {
+                // Convert SteamID variants (slow HTTP request)
+                use crate::services::steam_api::SteamService;
+                let steam_service = SteamService::new();
+                let steam_id_64 = steam_service.resolve_steam_id(&steam_id).await.unwrap_or_else(|| steam_id.clone());
+                let steam_id_2 = steam_service.id64_to_id2(&steam_id_64).unwrap_or_else(|| steam_id.clone());
+                let steam_id_3 = steam_service.id64_to_id3(&steam_id_64).unwrap_or_default();
+
+                // DB Insert
+                let expires_at = if bg_duration > 0 {
+                    Some(chrono::Utc::now() + chrono::Duration::minutes(bg_duration as i64))
+                } else {
+                    None
+                };
+                
+                let ip_only = ip.split(':').next().unwrap_or(&ip).to_string();
+                
+                tracing::info!("Background: Inserting ban for Name={}, SteamID={}, IP={}", name, steam_id_2, ip_only);
+
+                let db_result = sqlx::query(
+                    "INSERT INTO bans (name, steam_id, steam_id_3, steam_id_64, ip, ban_type, reason, duration, admin_name, expires_at, created_at, status, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'active', ?)"
+                )
+                .bind(&name)
+                .bind(&steam_id_2)
+                .bind(&steam_id_3)
+                .bind(&steam_id_64)
+                .bind(&ip_only)
+                .bind("ip") 
+                .bind(&reason)
+                .bind(bg_duration.to_string())
+                .bind(&bg_user_sub)
+                .bind(expires_at)
+                .bind(bg_server_id)
+                .execute(&bg_state.db)
+                .await;
+
+                if let Err(e) = db_result {
+                    tracing::error!("Background: Failed to insert ban into DB: {}", e);
+                }
+
+                let _ = log_admin_action(
+                    &bg_state.db, 
+                    &bg_user_sub, 
+                    "ban_player_rcon_db", 
+                    &format!("Server: {}, UserID: {}", bg_server_name, bg_userid), 
+                    &format!("Duration: {}, Reason: {}, Player: {} ({})", bg_duration, reason, name, steam_id)
+                ).await;
+            });
+
             (StatusCode::OK, Json("Player banned and recorded")).into_response()
         },
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("Failed to ban: {}", e))).into_response(),

@@ -218,7 +218,7 @@ pub async fn check_ban(
                     let new_ban = Ban {
                         id: new_id,
                         name: "Auto-Banned".to_string(),
-                        steam_id: steam_id,
+                        steam_id,
                         steam_id_3: None,
                         steam_id_64: Some(steam_id_64.clone()),
                         ip: ip,
@@ -231,20 +231,20 @@ pub async fn check_ban(
                         expires_at: expires_at,
                         server_id: b.server_id
                     };
-                    return (StatusCode::OK, Json(new_ban)).into_response();
+                    (StatusCode::OK, Json(new_ban)).into_response()
                 },
                 Err(e) => {
                     tracing::error!("CHECK_BAN: Failed to auto-create ban: {}", e);
                     // If insert fails, still return the IP ban so they are blocked
-                    return (StatusCode::OK, Json(b)).into_response();
+                    (StatusCode::OK, Json(b)).into_response()
                 }
             }
         },
         Ok(None) => {
 
-            return (StatusCode::NOT_FOUND, Json("Not banned")).into_response();
+            (StatusCode::NOT_FOUND, Json("Not banned")).into_response()
         },
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
 
@@ -586,8 +586,21 @@ pub async fn delete_ban(
                                 
                                 // Unban SteamID
                                 if !steam_id.is_empty() {
-                                    let cmd = format!("sm_unban \"{}\"", steam_id);
-                                    let _ = send_command(&address, &pwd, &cmd).await;
+                                    // Make sure we unban the exact string stored in the database
+                                    let cmd1 = format!("sm_unban \"{}\"", steam_id);
+                                    let _ = send_command(&address, &pwd, &cmd1).await;
+
+                                    // CSGO uses STEAM_1:0:xxx, but older databases may store STEAM_0:0:xxx.
+                                    // Send a supplementary unban replacing STEAM_0 with STEAM_1 to ensure it lifts.
+                                    if steam_id.starts_with("STEAM_0:") {
+                                        let steam_id_1 = steam_id.replacen("STEAM_0:", "STEAM_1:", 1);
+                                        let cmd2 = format!("sm_unban \"{}\"", steam_id_1);
+                                        let _ = send_command(&address, &pwd, &cmd2).await;
+                                    } else if steam_id.starts_with("STEAM_1:") {
+                                        let steam_id_0 = steam_id.replacen("STEAM_1:", "STEAM_0:", 1);
+                                        let cmd2 = format!("sm_unban \"{}\"", steam_id_0);
+                                        let _ = send_command(&address, &pwd, &cmd2).await;
+                                    }
                                 }
                                 
                                 // Unban IP

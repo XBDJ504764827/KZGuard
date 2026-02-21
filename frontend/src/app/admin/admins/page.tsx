@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UserPlus, ShieldPlus, ShieldCheck, Key, Loader2, Search, Edit } from 'lucide-react';
+import { UserPlus, ShieldPlus, ShieldCheck, Loader2, Search, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -79,7 +79,7 @@ export default function AdminsPage() {
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 setCurrentUser({ username: payload.sub, role: payload.role });
-            } catch (e) {
+            } catch {
                 console.error("Failed to parse user info from token.");
             }
         }
@@ -134,7 +134,7 @@ export default function AdminsPage() {
     const submitEditAdmin = async () => {
         if (!editAdminId) return;
 
-        const payload: any = {};
+        const payload: Partial<Admin> & { password?: string } = {};
         if (editAdminForm.username) payload.username = editAdminForm.username;
         if (editAdminForm.role) payload.role = editAdminForm.role;
         if (editAdminForm.steam_id !== undefined) payload.steam_id = editAdminForm.steam_id?.trim() || undefined;

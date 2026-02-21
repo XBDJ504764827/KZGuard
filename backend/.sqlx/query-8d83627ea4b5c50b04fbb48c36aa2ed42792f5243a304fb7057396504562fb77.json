@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT steam_id FROM bans WHERE status = 'active' AND steam_id IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "steam_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 128
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8d83627ea4b5c50b04fbb48c36aa2ed42792f5243a304fb7057396504562fb77"
+}
