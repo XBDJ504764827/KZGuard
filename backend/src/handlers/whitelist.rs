@@ -379,3 +379,43 @@ pub async fn get_player_info(
 
     (StatusCode::NOT_FOUND, Json(json!({ "error": "Player not found" }))).into_response()
 }
+
+// 查询单个玩家审核状态（公开接口）
+#[utoipa::path(
+    get,
+    path = "/api/whitelist/status",
+    params(
+        ("steam_id" = String, Query, description = "Steam ID (any format)")
+    ),
+    responses(
+        (status = 200, description = "Status found", body = Whitelist),
+        (status = 404, description = "Not found")
+    )
+)]
+pub async fn get_whitelist_status(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let steam_id = params.get("steam_id");
+    if steam_id.is_none() || steam_id.unwrap().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Missing steam_id" }))).into_response();
+    }
+    let steam_id = steam_id.unwrap();
+
+    let steam_service = SteamService::new();
+    let steam_id_64_opt = steam_service.resolve_steam_id(steam_id).await;
+
+    if let Some(steam_id_64) = steam_id_64_opt {
+        let record = sqlx::query_as::<_, Whitelist>("SELECT * FROM whitelist WHERE steam_id_64 = ? ORDER BY created_at DESC LIMIT 1")
+            .bind(&steam_id_64)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+
+        if let Some(whitelist) = record {
+            return (StatusCode::OK, Json(whitelist)).into_response();
+        }
+    }
+
+    (StatusCode::NOT_FOUND, Json(json!({ "error": "Application not found" }))).into_response()
+}

@@ -44,6 +44,7 @@ mod services;
         handlers::whitelist::reject_whitelist,
         handlers::whitelist::delete_whitelist,
         handlers::whitelist::list_public_whitelist,
+        handlers::whitelist::get_whitelist_status,
         handlers::whitelist::get_player_info,
         handlers::server::list_server_groups,
         handlers::server::create_group,
@@ -216,6 +217,7 @@ async fn main() {
         // 公开路由：白名单申请（无需认证）
         .route("/api/whitelist/apply", axum::routing::post(handlers::whitelist::apply_whitelist))
         .route("/api/whitelist/public-list", get(handlers::whitelist::list_public_whitelist))
+        .route("/api/whitelist/status", get(handlers::whitelist::get_whitelist_status))
         .route("/api/whitelist/player-info", get(handlers::whitelist::get_player_info))
         .route("/api/bans/public", get(handlers::ban::list_public_bans))
         .merge(protected_routes)

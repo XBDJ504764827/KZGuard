@@ -5,24 +5,36 @@ import { Search, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { apiFetch } from '@/lib/api';
 
 export default function WhitelistStatusPage() {
     const [steamId, setSteamId] = useState('');
     const [result, setResult] = useState<'approved' | 'pending' | 'rejected' | null>(null); // 'approved', 'pending', 'rejected', null
     const [loading, setLoading] = useState(false);
 
-    const handleSearch = (e: React.FormEvent) => {
+    const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!steamId) return;
 
         setLoading(true);
-        // Simulate API lookup
-        setTimeout(() => {
+        setResult(null);
+        try {
+            const res = await apiFetch(`/api/whitelist/status?steam_id=${encodeURIComponent(steamId)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setResult(data.status);
+            } else if (res.status === 404) {
+                toast.error('Application not found');
+            } else {
+                toast.error('Failed to fetch status');
+            }
+        } catch (error) {
+            console.error('Error fetching status:', error);
+            toast.error('Network error');
+        } finally {
             setLoading(false);
-            if (steamId.includes('1')) setResult('approved');
-            else if (steamId.includes('2')) setResult('rejected');
-            else setResult('pending');
-        }, 600);
+        }
     };
 
     return (

@@ -1,24 +1,66 @@
 'use client';
 
 import React, { useState } from 'react';
-import { FileSignature, ShieldCheck } from 'lucide-react';
+import { FileSignature, ShieldCheck, SearchCode, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { apiFetch } from '@/lib/api';
 
 export default function WhitelistApplyPage() {
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const [steamInput, setSteamInput] = useState('');
+    const [name, setName] = useState('');
+    const [fetchingInfo, setFetchingInfo] = useState(false);
+
+    const handleFetchInfo = async () => {
+        if (!steamInput) return;
+        setFetchingInfo(true);
+        try {
+            const res = await apiFetch(`/api/whitelist/player-info?steam_id=${encodeURIComponent(steamInput)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setName(data.personaname);
+                toast.success('Player info fetched successfully!');
+            } else {
+                toast.error('Could not find player. Please check the SteamID/URL.');
+            }
+        } catch (error) {
+            console.error('Error fetching info:', error);
+            toast.error('Failed to connect to server.');
+        } finally {
+            setFetchingInfo(false);
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setTimeout(() => {
+
+        try {
+            const res = await apiFetch('/api/whitelist/apply', {
+                method: 'POST',
+                body: JSON.stringify({ steam_id: steamInput, name })
+            });
+
+            if (res.ok) {
+                toast.success('Application submitted successfully! Please wait for admin approval.');
+                setSteamInput('');
+                setName('');
+            } else {
+                const data = await res.json().catch(() => ({}));
+                toast.error(`Submit failed: ${data.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error submitting application:', error);
+            toast.error('Network error during submission.');
+        } finally {
             setLoading(false);
-            toast.success('Application submitted successfully!');
-        }, 1000);
+        }
     };
 
     return (
@@ -44,35 +86,41 @@ export default function WhitelistApplyPage() {
                     </CardHeader>
                     <CardContent className="pt-6">
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="steamid">SteamID / Profile URL <span className="text-xs text-slate-400 font-normal">(Any format works)</span></Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            id="steamid"
+                                            required
+                                            value={steamInput}
+                                            onChange={(e) => setSteamInput(e.target.value)}
+                                            placeholder="STEAM_0:1:123456 or Profile Link"
+                                            className="bg-slate-50 dark:bg-slate-950 font-mono focus:ring-emerald-500"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={handleFetchInfo}
+                                            disabled={!steamInput || fetchingInfo}
+                                            className="shrink-0"
+                                        >
+                                            {fetchingInfo ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <SearchCode className="h-4 w-4 mr-2" />}
+                                            Fetch Info
+                                        </Button>
+                                    </div>
+                                </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="nickname">In-game Name</Label>
-                                    <Input id="nickname" required placeholder="e.g. ProPlayer" className="bg-slate-50 dark:bg-slate-950 focus:ring-emerald-500" />
+                                    <Input
+                                        id="nickname"
+                                        required
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        placeholder="Auto-filled via Fetch or type manually"
+                                        className="bg-slate-50 dark:bg-slate-950 focus:ring-emerald-500"
+                                    />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="steamid">SteamID <span className="text-xs text-slate-400 font-normal">(STEAM_0:X:XXXXX)</span></Label>
-                                    <Input id="steamid" required placeholder="STEAM_0:1:123456" className="bg-slate-50 dark:bg-slate-950 font-mono focus:ring-emerald-500" />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="steamurl">Steam Community URL</Label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <span className="text-slate-400">🔗</span>
-                                    </div>
-                                    <Input id="steamurl" required placeholder="https://steamcommunity.com/id/yourcustomurl" className="pl-10 bg-slate-50 dark:bg-slate-950 focus:ring-emerald-500" />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="reason">Why do you want to join our servers?</Label>
-                                <Textarea
-                                    id="reason"
-                                    required
-                                    placeholder="Tell us a bit about yourself and why you're a good fit..."
-                                    className="min-h-[120px] bg-slate-50 dark:bg-slate-950 focus:ring-emerald-500 resize-none"
-                                />
                             </div>
 
                             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex gap-3">

@@ -134,19 +134,28 @@ pub async fn check_ban(
     };
 
     match account_ban {
-        Ok(Some(b)) => {
-
+        Ok(Some(mut b)) => {
             // Check expiration
+            let mut expired = false;
             if let Some(expires_at) = b.expires_at {
                 if Utc::now() > expires_at {
-
+                    expired = true;
                     let _ = sqlx::query("UPDATE bans SET status = 'expired' WHERE id = ?")
                         .bind(b.id).execute(&state.db).await;
                     // Expired - Do NOT return yet. Treat as not banned, proceed to check IP.
-                } else {
-                    return (StatusCode::OK, Json(b)).into_response();
                 }
-            } else {
+            }
+
+            if !expired {
+                // If ban has no IP but the request has an IP, we record the IP automatically.
+                // This ensures if the admin banned via SteamID without knowing the IP,
+                // the IP is bound upon first connection. If ban_type='ip', it acts dynamically!
+                if b.ip.is_empty() && !ip.is_empty() {
+                    let _ = sqlx::query("UPDATE bans SET ip = ? WHERE id = ?")
+                        .bind(&ip).bind(b.id).execute(&state.db).await;
+                    b.ip = ip.clone();
+                    tracing::info!("CHECK_BAN: Automatically recorded IP {} for banned account {}", ip, b.steam_id);
+                }
                 return (StatusCode::OK, Json(b)).into_response();
             }
         },
@@ -154,9 +163,7 @@ pub async fn check_ban(
              tracing::error!("CHECK_BAN: DB Error on Account Check: {}", e);
              return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
         },
-        Ok(None) => {
-
-        }
+        Ok(None) => {}
     }
 
     // 2. Check for IP Ban (Matches IP AND ban_type = 'ip')
@@ -374,6 +381,7 @@ pub async fn create_ban(
     Json(payload): Json<CreateBanRequest>,
 ) -> impl IntoResponse {
     let expires_at = calculate_expires_at(&payload.duration);
+    let ip = payload.ip.unwrap_or_default();
 
     // 解析输入的 SteamID 为各种格式
     let steam_service = SteamService::new();
@@ -393,7 +401,7 @@ pub async fn create_ban(
     .bind(&steam_id_2)
     .bind(&steam_id_3)
     .bind(&steam_id_64)
-    .bind(&payload.ip)
+    .bind(&ip)
     .bind(&payload.ban_type)
     .bind(&payload.reason)
     .bind(&payload.duration)

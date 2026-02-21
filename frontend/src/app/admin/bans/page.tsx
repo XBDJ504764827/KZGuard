@@ -79,6 +79,7 @@ export default function BanListPage() {
         try {
             const payload = {
                 ...banForm,
+                duration: banForm.duration.toString(),
                 ip: banForm.ip || null,
                 reason: banForm.reason || null
             };

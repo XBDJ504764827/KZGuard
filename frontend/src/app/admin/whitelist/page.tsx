@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Dialog,
     DialogContent,
@@ -37,6 +38,8 @@ type WhitelistUser = {
     reject_reason: string | null;
     admin_name: string | null;
     created_at: string | null;
+    ban_record?: any;
+    global_ban_record?: any;
 };
 
 export default function WhitelistPage() {
@@ -54,18 +57,91 @@ export default function WhitelistPage() {
     const [isApproveAllOpen, setIsApproveAllOpen] = useState(false);
     const [removeId, setRemoveId] = useState<number | null>(null);
 
+    // Reject Dialog State
+    const [rejectId, setRejectId] = useState<number | null>(null);
+    const [rejectReason, setRejectReason] = useState('');
+
     const fetchWhitelist = async () => {
         try {
             setLoading(true);
-            const res = await apiFetch('/api/whitelist');
-            if (res.ok) {
-                const data = await res.json();
-                setWhitelist(data);
-            } else {
-                console.error('Failed to fetch whitelist');
+            const [approvedRes, pendingRes, rejectedRes] = await Promise.allSettled([
+                apiFetch('/api/whitelist'),
+                apiFetch('/api/whitelist/pending'),
+                apiFetch('/api/whitelist/rejected')
+            ]);
+
+            let combinedList: WhitelistUser[] = [];
+
+            if (approvedRes.status === 'fulfilled' && approvedRes.value.ok) {
+                const data = await approvedRes.value.json();
+                combinedList = [...combinedList, ...data];
             }
+            if (pendingRes.status === 'fulfilled' && pendingRes.value.ok) {
+                const data = await pendingRes.value.json();
+                combinedList = [...combinedList, ...data];
+            }
+            if (rejectedRes.status === 'fulfilled' && rejectedRes.value.ok) {
+                const data = await rejectedRes.value.json();
+                combinedList = [...combinedList, ...data];
+            }
+
+            // Fetch ALL active bans once to avoid N+1 requests and 404 spam
+            let activeBans: any[] = [];
+            try {
+                const bansRes = await apiFetch('/api/bans');
+                if (bansRes.ok) {
+                    const bansData = await bansRes.json();
+                    activeBans = bansData.filter((b: any) => b.status === 'active');
+                }
+            } catch (e) {
+                console.error('Error fetching bans list', e);
+            }
+
+            // Fetch Global Bans using bulk API
+            let globalBansMap: Record<string, any> = {};
+            try {
+                const steamIds64 = combinedList
+                    .map(u => u.steam_id_64)
+                    .filter(id => id && id.trim() !== '') as string[];
+
+                if (steamIds64.length > 0) {
+                    const globalRes = await apiFetch('/api/check_global_ban/bulk', {
+                        method: 'POST',
+                        body: JSON.stringify({ steam_ids: steamIds64 })
+                    });
+                    if (globalRes.ok) {
+                        globalBansMap = await globalRes.json();
+                    }
+                }
+            } catch (e) {
+                console.error('Error fetching global bans', e);
+            }
+
+            const listWithBans = combinedList.map(user => {
+                // Determine if user has any matching active local ban
+                const userBan = activeBans.find(b =>
+                    (b.steam_id && b.steam_id === user.steam_id) ||
+                    (b.steam_id_64 && user.steam_id_64 && b.steam_id_64 === user.steam_id_64) ||
+                    (b.steam_id_3 && user.steam_id_3 && b.steam_id_3 === user.steam_id_3)
+                );
+
+                // Determine if user has a global ban
+                const globalBan = user.steam_id_64 ? globalBansMap[user.steam_id_64] : null;
+
+                return { ...user, ban_record: userBan || null, global_ban_record: globalBan || null };
+            });
+
+            // Sort combined list by created_at descending just in case
+            listWithBans.sort((a, b) => {
+                if (!a.created_at) return 1;
+                if (!b.created_at) return -1;
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            });
+
+            setWhitelist(listWithBans);
         } catch (error) {
             console.error('Error fetching whitelist:', error);
+            toast.error('获取白名单数据失败');
         } finally {
             setLoading(false);
         }
@@ -149,10 +225,10 @@ export default function WhitelistPage() {
         setIsApproveAllOpen(true);
     };
 
-    const handleAction = async (id: number, action: 'approve' | 'reject', rejectReason = '') => {
+    const handleAction = async (id: number, action: 'approve' | 'reject', providedReason = '') => {
         try {
             setActionLoading(`${action}-${id}`);
-            const body = action === 'reject' ? JSON.stringify({ reason: rejectReason || 'Denied by admin' }) : undefined;
+            const body = action === 'reject' ? JSON.stringify({ reason: providedReason || 'Denied by admin' }) : undefined;
 
             const res = await apiFetch(`/api/whitelist/${id}/${action}`, {
                 method: 'PUT',
@@ -196,9 +272,177 @@ export default function WhitelistPage() {
         }
     };
 
+    const submitReject = async () => {
+        if (!rejectId) return;
+        if (!rejectReason.trim()) {
+            toast.error('请输入拒绝理由');
+            return;
+        }
+        await handleAction(rejectId, 'reject', rejectReason);
+        setRejectId(null);
+        setRejectReason('');
+    };
+
     const filteredWhitelist = whitelist.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.steam_id.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const approvedList = filteredWhitelist.filter(u => u.status === 'approved');
+    const pendingList = filteredWhitelist.filter(u => u.status === 'pending');
+    const rejectedList = filteredWhitelist.filter(u => u.status === 'rejected');
+
+    const renderTable = (list: WhitelistUser[]) => (
+        <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                            <th className="px-6 py-4 whitespace-nowrap">Player Info</th>
+                            <th className="px-6 py-4 whitespace-nowrap">Added By</th>
+                            <th className="px-6 py-4 whitespace-nowrap">Time</th>
+                            <th className="px-6 py-4 whitespace-nowrap">Status</th>
+                            <th className="px-6 py-4 whitespace-nowrap text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+                        {loading ? (
+                            <tr>
+                                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                                    <div className="flex justify-center flex-col items-center">
+                                        <Loader2 className="h-8 w-8 animate-spin mb-4 text-emerald-500" />
+                                        <p>Loading whitelist...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : list.length === 0 ? (
+                            <tr>
+                                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                                    No records found for this category.
+                                </td>
+                            </tr>
+                        ) : list.map(user => (
+                            <tr key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                <td className="px-6 py-4">
+                                    <div className="flex flex-col gap-0.5">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-semibold text-slate-900 dark:text-white">{user.name}</span>
+                                            {user.ban_record && (
+                                                <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider">
+                                                    Local Banned
+                                                </Badge>
+                                            )}
+                                            {user.global_ban_record && user.global_ban_record.data && user.global_ban_record.data.length > 0 && (
+                                                <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-red-600 hover:bg-red-700">
+                                                    Global Banned
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <span className="text-xs font-mono text-slate-500">ID2: {user.steam_id}</span>
+                                        {user.steam_id_3 && <span className="text-xs font-mono text-slate-400">ID3: {user.steam_id_3}</span>}
+                                        {user.steam_id_64 && <span className="text-xs font-mono text-slate-400">ID64: {user.steam_id_64}</span>}
+
+                                        {/* Display Global Ban details if present */}
+                                        {user.global_ban_record && user.global_ban_record.data && user.global_ban_record.data.length > 0 && (
+                                            <div className="mt-1 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs text-red-800 dark:text-red-300">
+                                                <p className="font-semibold mb-0.5">Global Ban Details:</p>
+                                                {user.global_ban_record.data.map((ban: any, idx: number) => (
+                                                    <div key={idx} className="mb-2 last:mb-0 border-b border-red-200/50 dark:border-red-800/50 pb-2 last:border-0 last:pb-0">
+                                                        <div className="flex gap-4 mb-1">
+                                                            <div><span className="opacity-70">Type:</span> <span className="font-semibold">{ban.ban_type || 'Unknown'}</span></div>
+                                                            <div><span className="opacity-70">Server:</span> <span className="font-medium">{ban.server_name || 'Global'}</span></div>
+                                                            {ban.created_on && (
+                                                                <div><span className="opacity-70">Date:</span> <span className="font-mono">{new Date(ban.created_on).toLocaleDateString()}</span></div>
+                                                            )}
+                                                        </div>
+                                                        <div className="mb-0.5">
+                                                            <span className="opacity-70">Reason / Notes:</span> <span className="font-medium">{ban.notes || 'No reason provided'}</span>
+                                                        </div>
+                                                        {ban.stats && (
+                                                            <div>
+                                                                <span className="opacity-70">Stats:</span> <span className="font-mono text-[10px] break-all opacity-90">{ban.stats}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Display Local Ban details if present */}
+                                        {user.ban_record && (
+                                            <div className="mt-1 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs text-red-800 dark:text-red-300">
+                                                <p className="font-semibold mb-0.5">Local Ban Record:</p>
+                                                <div>
+                                                    <span className="opacity-80">Reason: </span>
+                                                    <span className="font-medium">{user.ban_record.reason || 'No reason provided'}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                    <div className="flex items-center gap-2">
+                                        {user.admin_name ? (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                                        ) : (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
+                                        )}
+                                        <span className="text-slate-700 dark:text-slate-300">{user.admin_name || 'Self Application'}</span>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm font-mono flex flex-col gap-1">
+                                    <span>{user.created_at ? new Date(user.created_at).toLocaleString() : 'N/A'}</span>
+                                    {user.reject_reason && <span className="text-xs text-red-500 w-32 truncate" title={user.reject_reason}> Reason: {user.reject_reason}</span>}
+                                </td>
+                                <td className="px-6 py-4">
+                                    {user.status === 'pending' && <Badge variant="secondary" className="bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-900 text-xs">审核中</Badge>}
+                                    {user.status === 'approved' && <Badge variant="secondary" className="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 text-xs">已通过</Badge>}
+                                    {user.status === 'rejected' && <Badge variant="secondary" className="bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-900 text-xs">已拒绝</Badge>}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                    {user.status === 'pending' ? (
+                                        <div className="flex items-center justify-end gap-2">
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                                                title="Approve"
+                                                disabled={actionLoading !== null}
+                                                onClick={() => handleAction(user.id, 'approve')}
+                                            >
+                                                {actionLoading === `approve-${user.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                            </Button>
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                title="Reject"
+                                                disabled={actionLoading !== null}
+                                                onClick={() => { setRejectId(user.id); setRejectReason(''); }}
+                                            >
+                                                {actionLoading === `reject-${user.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-end">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs h-8"
+                                                disabled={actionLoading !== null}
+                                                onClick={() => setRemoveId(user.id)}
+                                            >
+                                                {actionLoading === `remove-${user.id}` ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : 'Remove'}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     );
 
     return (
@@ -235,107 +479,23 @@ export default function WhitelistPage() {
                 </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-200 dark:border-slate-800">
-                            <tr>
-                                <th className="px-6 py-4 whitespace-nowrap">Player Info</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Added By</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Time</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Status</th>
-                                <th className="px-6 py-4 whitespace-nowrap text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                        <div className="flex justify-center flex-col items-center">
-                                            <Loader2 className="h-8 w-8 animate-spin mb-4 text-emerald-500" />
-                                            <p>Loading whitelist...</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : filteredWhitelist.length === 0 ? (
-                                <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                        No whitelist records found.
-                                    </td>
-                                </tr>
-                            ) : filteredWhitelist.map(user => (
-                                <tr key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-col gap-0.5">
-                                            <span className="font-semibold text-slate-900 dark:text-white">{user.name}</span>
-                                            <span className="text-xs font-mono text-slate-500">ID2: {user.steam_id}</span>
-                                            {user.steam_id_3 && <span className="text-xs font-mono text-slate-400">ID3: {user.steam_id_3}</span>}
-                                            {user.steam_id_64 && <span className="text-xs font-mono text-slate-400">ID64: {user.steam_id_64}</span>}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            {user.admin_name ? (
-                                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-                                            ) : (
-                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
-                                            )}
-                                            <span className="text-slate-700 dark:text-slate-300">{user.admin_name || 'Self Application'}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm font-mono flex flex-col gap-1">
-                                        <span>{user.created_at ? new Date(user.created_at).toLocaleString() : 'N/A'}</span>
-                                        {user.reject_reason && <span className="text-xs text-red-500 w-32 truncate" title={user.reject_reason}> Reason: {user.reject_reason}</span>}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {user.status === 'pending' && <Badge variant="secondary" className="bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-900 text-xs">审核中</Badge>}
-                                        {user.status === 'approved' && <Badge variant="secondary" className="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 text-xs">已通过</Badge>}
-                                        {user.status === 'rejected' && <Badge variant="secondary" className="bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-900 text-xs">已拒绝</Badge>}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        {user.status === 'pending' ? (
-                                            <div className="flex items-center justify-end gap-2">
-                                                <Button
-                                                    size="icon"
-                                                    variant="outline"
-                                                    className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                                                    title="Approve"
-                                                    disabled={actionLoading !== null}
-                                                    onClick={() => handleAction(user.id, 'approve')}
-                                                >
-                                                    {actionLoading === `approve-${user.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                                </Button>
-                                                <Button
-                                                    size="icon"
-                                                    variant="outline"
-                                                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                                    title="Reject"
-                                                    disabled={actionLoading !== null}
-                                                    onClick={() => handleAction(user.id, 'reject')}
-                                                >
-                                                    {actionLoading === `reject-${user.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center justify-end">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs h-8"
-                                                    disabled={actionLoading !== null}
-                                                    onClick={() => setRemoveId(user.id)}
-                                                >
-                                                    {actionLoading === `remove-${user.id}` ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : 'Remove'}
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <Tabs defaultValue="approved" className="w-full">
+                <TabsList className="mb-4">
+                    <TabsTrigger value="approved" className="flex gap-2">已通过 <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-xs font-mono">{approvedList.length}</Badge></TabsTrigger>
+                    <TabsTrigger value="pending" className="flex gap-2">待审核 <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400 rounded-full px-2 py-0.5 text-xs font-mono">{pendingList.length}</Badge></TabsTrigger>
+                    <TabsTrigger value="rejected" className="flex gap-2">已拒绝 <Badge variant="secondary" className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400 rounded-full px-2 py-0.5 text-xs font-mono">{rejectedList.length}</Badge></TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="approved">
+                    {renderTable(approvedList)}
+                </TabsContent>
+                <TabsContent value="pending">
+                    {renderTable(pendingList)}
+                </TabsContent>
+                <TabsContent value="rejected">
+                    {renderTable(rejectedList)}
+                </TabsContent>
+            </Tabs>
 
             {/* Add Whitelist Dialog */}
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -422,6 +582,44 @@ export default function WhitelistPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Reject Reason Dialog */}
+            <Dialog open={rejectId !== null} onOpenChange={(open) => { if (!open) setRejectId(null); }}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="text-red-600 dark:text-red-500">拒绝申请</DialogTitle>
+                        <DialogDescription>
+                            请输入拒绝该玩家加入白名单的理由。该理由将展示在玩家的数据列表中。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-4">
+                            <Label htmlFor="rejectReason">
+                                拒绝理由
+                            </Label>
+                            <Input
+                                id="rejectReason"
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                placeholder="例如：疑似作弊、VAC封禁记录、不符合社区要求等"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        submitReject();
+                                    }
+                                }}
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRejectId(null)}>取消</Button>
+                        <Button onClick={submitReject} className="bg-red-600 hover:bg-red-700 text-white" disabled={!rejectReason.trim()}>
+                            确认拒绝
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

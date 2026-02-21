@@ -264,21 +264,54 @@ impl SteamService {
         Some(format!("[U:1:{}]", account_id))
     }
     pub async fn get_player_summary(&self, steam_id_64: &str) -> Option<PlayerSummary> {
-        let url = format!(
+        // Try api.steamchina.com first for better connectivity in mainland China
+        let url_china = format!(
+            "https://api.steamchina.com/ISteamUser/GetPlayerSummaries/v0002/?key={}&steamids={}",
+            &self.api_key, steam_id_64
+        );
+        
+        let url_global = format!(
             "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={}&steamids={}",
             &self.api_key, steam_id_64
         );
 
-        match self.client.get(&url).send().await {
-            Ok(resp) => {
+        let mut success_china = false;
+
+        if let Ok(resp) = self.client.get(&url_china).send().await {
+            if resp.status().is_success() {
                 if let Ok(data) = resp.json::<PlayerSummaryResponse>().await {
                     if let Some(player) = data.response.players.first() {
                         return Some(player.clone());
+                    } else {
+                        // Data parse succeeded but array is empty. Steamchina might not have this player's data.
+                        success_china = true; 
                     }
                 }
             }
-            Err(e) => tracing::error!("Steam API Summary Error: {}", e),
         }
+
+        // Fallback to global API if china API failed or returned empty data
+        tracing::debug!("Steam API: steamchina failed or returned no data for {}, falling back to steampowered", steam_id_64);
+        match self.client.get(&url_global).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    if let Ok(data) = resp.json::<PlayerSummaryResponse>().await {
+                        if let Some(player) = data.response.players.first() {
+                            return Some(player.clone());
+                        } else {
+                            // Both APIs returned empty
+                             tracing::warn!("Steam API Summary returned empty for steam_id: {}", steam_id_64);
+                        }
+                    } else {
+                        tracing::error!("Steam API Summary Parse Error (Global)");
+                    }
+                } else {
+                    tracing::error!("Steam API Summary Global returned status: {}", resp.status());
+                }
+            }
+            Err(e) => tracing::error!("Steam API Summary Error (Global): {}", e),
+        }
+        
         None
     }
 }

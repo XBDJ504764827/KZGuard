@@ -40,7 +40,7 @@ pub struct PublicBan {
 pub struct CreateBanRequest {
     pub name: String,
     pub steam_id: String,
-    pub ip: String,
+    pub ip: Option<String>,
     pub ban_type: String,
     pub reason: Option<String>,
     pub duration: String,
