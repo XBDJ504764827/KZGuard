@@ -95,8 +95,8 @@ pub async fn create_verification(
     let status = payload.status.unwrap_or_else(|| "pending".to_string());
     
     // Strict status validation
-    if !["pending", "verified", "allowed"].contains(&status.as_str()) {
-         return Err(format!("Invalid status '{}'. Allowed: pending, verified, allowed", status));
+    if !["pending", "verified", "allowed", "denied"].contains(&status.as_str()) {
+         return Err(format!("Invalid status '{}'. Allowed: pending, verified, allowed, denied", status));
     }
     
     // Check if exists
@@ -161,8 +161,8 @@ pub async fn update_verification(
     }
 
     if let Some(s) = &payload.status {
-        if !["pending", "verified", "allowed"].contains(&s.as_str()) {
-             return Err(format!("Invalid status '{}'. Allowed: pending, verified, allowed", s));
+        if !["pending", "verified", "allowed", "denied"].contains(&s.as_str()) {
+             return Err(format!("Invalid status '{}'. Allowed: pending, verified, allowed, denied", s));
         }
         let _ = sqlx::query("UPDATE player_verifications SET status = ? WHERE steam_id = ?")
             .bind(s)

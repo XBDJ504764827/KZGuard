@@ -9,6 +9,16 @@ import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type BanInfo = {
     id: number;
@@ -31,6 +41,7 @@ export default function BanListPage() {
 
     const [isCreateBanOpen, setIsCreateBanOpen] = useState(false);
     const [isCheckingSteam, setIsCheckingSteam] = useState(false);
+    const [deleteBanId, setDeleteBanId] = useState<number | null>(null);
     const [banForm, setBanForm] = useState({
         name: '',
         steam_id: '',
@@ -117,10 +128,10 @@ export default function BanListPage() {
         }
     };
 
-    const handleDeleteBan = async (id: number) => {
-        if (!confirm('Are you sure you want to permanently delete this ban? Only Super Admins can perform this action.')) return;
+    const submitDeleteBan = async () => {
+        if (!deleteBanId) return;
         try {
-            const res = await apiFetch(`/api/bans/${id}`, { method: 'DELETE' });
+            const res = await apiFetch(`/api/bans/${deleteBanId}`, { method: 'DELETE' });
             if (res.ok) {
                 toast.success('Ban deleted and unban queued');
                 fetchBans();
@@ -132,6 +143,8 @@ export default function BanListPage() {
         } catch (error) {
             console.error(error);
             toast.error('Error deleting ban');
+        } finally {
+            setDeleteBanId(null);
         }
     };
 
@@ -350,7 +363,7 @@ export default function BanListPage() {
                                                     <ShieldBan className="h-4 w-4" />
                                                 </Button>
                                             )}
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" title="Permanently Delete Ban" onClick={() => handleDeleteBan(ban.id)}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" title="Permanently Delete Ban" onClick={() => setDeleteBanId(ban.id)}>
                                                 <Trash className="h-4 w-4" />
                                             </Button>
                                         </div>
@@ -361,6 +374,22 @@ export default function BanListPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Delete Ban Alert Dialog */}
+            <AlertDialog open={deleteBanId !== null} onOpenChange={(open) => !open && setDeleteBanId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>确定要永久删除此封禁吗？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            此操作不可逆。删除后将自动解除玩家的封禁。仅 Super Admin 能够执行此操作。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDeleteBanId(null)}>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={submitDeleteBan} className="bg-red-600 hover:bg-red-700 text-white">确定删除</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

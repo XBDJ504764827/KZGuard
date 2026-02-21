@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
 
 export default function WhitelistApplyPage() {
     const [loading, setLoading] = useState(false);
@@ -16,7 +17,7 @@ export default function WhitelistApplyPage() {
         setLoading(true);
         setTimeout(() => {
             setLoading(false);
-            alert('Application submitted successfully!');
+            toast.success('Application submitted successfully!');
         }, 1000);
     };
 

@@ -1,0 +1,1 @@
+ALTER TABLE whitelist ADD COLUMN steam_id_3 VARCHAR(64) NULL;

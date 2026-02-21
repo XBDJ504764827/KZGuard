@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { apiFetch } from '@/lib/api';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -62,6 +63,14 @@ export default function CommunityManagementPage() {
 
     // Cooldown state for player refresh
     const [refreshCooldown, setRefreshCooldown] = useState(0);
+
+    // Dialogs States
+    const [deleteGroupId, setDeleteGroupId] = useState<number | null>(null);
+    const [deleteServerId, setDeleteServerId] = useState<number | null>(null);
+    const [kickPlayerUserid, setKickPlayerUserid] = useState<number | null>(null);
+
+    const [banPlayerUserid, setBanPlayerUserid] = useState<number | null>(null);
+    const [banDuration, setBanDuration] = useState(0);
 
     const fetchGroups = async () => {
         setLoading(true);
@@ -137,10 +146,10 @@ export default function CommunityManagementPage() {
         }
     };
 
-    const handleDeleteGroup = async (id: number) => {
-        if (!confirm('Are you sure you want to delete this group?')) return;
+    const submitDeleteGroup = async () => {
+        if (!deleteGroupId) return;
         try {
-            const res = await apiFetch(`/api/server-groups/${id}`, { method: 'DELETE' });
+            const res = await apiFetch(`/api/server-groups/${deleteGroupId}`, { method: 'DELETE' });
             if (res.ok) {
                 toast.success('Group deleted');
                 fetchGroups();
@@ -150,6 +159,8 @@ export default function CommunityManagementPage() {
         } catch (error) {
             console.error(error);
             toast.error('Error deleting group');
+        } finally {
+            setDeleteGroupId(null);
         }
     };
 
@@ -234,13 +245,13 @@ export default function CommunityManagementPage() {
         }
     };
 
-    const handleDeleteServer = async (id: number) => {
-        if (!confirm('Are you sure you want to remove this server?')) return;
+    const submitDeleteServer = async () => {
+        if (!deleteServerId) return;
         try {
-            const res = await apiFetch(`/api/servers/${id}`, { method: 'DELETE' });
+            const res = await apiFetch(`/api/servers/${deleteServerId}`, { method: 'DELETE' });
             if (res.ok) {
                 toast.success('Server removed');
-                if (activeServer?.id === id) setIsManageServerOpen(false);
+                if (activeServer?.id === deleteServerId) setIsManageServerOpen(false);
                 fetchGroups();
             } else {
                 toast.error('Failed to remove server');
@@ -248,15 +259,17 @@ export default function CommunityManagementPage() {
         } catch (error) {
             console.error(error);
             toast.error('Error removing server');
+        } finally {
+            setDeleteServerId(null);
         }
     };
 
-    const handleKickPlayer = async (userid: number) => {
-        if (!activeServer || !confirm('Kick this player?')) return;
+    const submitKickPlayer = async () => {
+        if (!activeServer || !kickPlayerUserid) return;
         try {
             const res = await apiFetch(`/api/servers/${activeServer.id}/kick`, {
                 method: 'POST',
-                body: JSON.stringify({ userid, reason: "Kicked via Web Dash" })
+                body: JSON.stringify({ userid: kickPlayerUserid, reason: "Kicked via Web Dash" })
             });
             if (res.ok) {
                 toast.success('Player kicked');
@@ -267,21 +280,17 @@ export default function CommunityManagementPage() {
         } catch (error) {
             console.error(error);
             toast.error('Error kicking player');
+        } finally {
+            setKickPlayerUserid(null);
         }
     };
 
-    const handleBanPlayer = async (userid: number) => {
-        if (!activeServer) return;
-        const durationStr = prompt("Enter ban duration in minutes (0 for permanent):", "0");
-        if (durationStr === null) return;
-
-        let duration = parseInt(durationStr);
-        if (isNaN(duration)) duration = 0;
-
+    const submitBanPlayer = async () => {
+        if (!activeServer || !banPlayerUserid) return;
         try {
             const res = await apiFetch(`/api/servers/${activeServer.id}/ban`, {
                 method: 'POST',
-                body: JSON.stringify({ userid, duration, reason: "Banned via Web Dash" })
+                body: JSON.stringify({ userid: banPlayerUserid, duration: banDuration, reason: "Banned via Web Dash" })
             });
             if (res.ok) {
                 toast.success('Player banned');
@@ -292,6 +301,8 @@ export default function CommunityManagementPage() {
         } catch (error) {
             console.error(error);
             toast.error('Error banning player');
+        } finally {
+            setBanPlayerUserid(null);
         }
     };
 
@@ -354,7 +365,7 @@ export default function CommunityManagementPage() {
                                             <Plus className="mr-2 h-3.5 w-3.5" />
                                             添加服务器
                                         </Button>
-                                        <Button variant="ghost" size="sm" className="h-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => handleDeleteGroup(group.id)}>
+                                        <Button variant="ghost" size="sm" className="h-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setDeleteGroupId(group.id)}>
                                             删除组
                                         </Button>
                                     </div>
@@ -403,7 +414,7 @@ export default function CommunityManagementPage() {
                                                     <Button variant="outline" size="sm" className="w-full text-xs h-8 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => openManageServer(server)}>
                                                         <Edit className="h-3 w-3 mr-1.5" /> 管理
                                                     </Button>
-                                                    <Button variant="ghost" size="sm" className="w-full text-xs h-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => handleDeleteServer(server.id)}>
+                                                    <Button variant="ghost" size="sm" className="w-full text-xs h-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setDeleteServerId(server.id)}>
                                                         <Trash2 className="h-3 w-3 mr-1.5" /> 删除
                                                     </Button>
                                                 </div>
@@ -549,10 +560,10 @@ export default function CommunityManagementPage() {
                                                     <td className="px-4 py-2 text-xs">{p.time}</td>
                                                     <td className="px-4 py-2 text-xs">{p.ping}</td>
                                                     <td className="px-4 py-2 text-right flex justify-end gap-2">
-                                                        <Button variant="ghost" size="sm" className="h-7 px-2 text-orange-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/30" onClick={() => handleKickPlayer(p.userid)}>
+                                                        <Button variant="ghost" size="sm" className="h-7 px-2 text-orange-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/30" onClick={() => setKickPlayerUserid(p.userid)}>
                                                             <LogOut className="h-3 w-3 mr-1" /> Kick
                                                         </Button>
-                                                        <Button variant="ghost" size="sm" className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={() => handleBanPlayer(p.userid)}>
+                                                        <Button variant="ghost" size="sm" className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={() => setBanPlayerUserid(p.userid)}>
                                                             <ShieldBan className="h-3 w-3 mr-1" /> Ban
                                                         </Button>
                                                     </td>
@@ -564,6 +575,82 @@ export default function CommunityManagementPage() {
                             )}
                         </div>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Group Alert Dialog */}
+            <AlertDialog open={deleteGroupId !== null} onOpenChange={(open) => !open && setDeleteGroupId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>确定要删除该分组吗？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            删除分组前，请确保组下的所有服务器均已被删除或者转移，否则可能导致异常。此操作不可逆。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDeleteGroupId(null)}>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={submitDeleteGroup} className="bg-red-600 hover:bg-red-700 text-white">确定删除</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Delete Server Alert Dialog */}
+            <AlertDialog open={deleteServerId !== null} onOpenChange={(open) => !open && setDeleteServerId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>确定要移除此服务器吗？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            将从管理面板中移除对该服务器的状态监控和操作权限。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDeleteServerId(null)}>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={submitDeleteServer} className="bg-red-600 hover:bg-red-700 text-white">确定移除</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Kick Player Alert Dialog */}
+            <AlertDialog open={kickPlayerUserid !== null} onOpenChange={(open) => !open && setKickPlayerUserid(null)}>
+                <AlertDialogContent className="z-[60]">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>确定断开此玩家的连接？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            该玩家将会被强制踢出当前的对局。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setKickPlayerUserid(null)}>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={submitKickPlayer} className="bg-orange-600 hover:bg-orange-700 text-white">确定踢出</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Ban Player Dialog */}
+            <Dialog open={banPlayerUserid !== null} onOpenChange={(open) => !open && setBanPlayerUserid(null)}>
+                <DialogContent className="sm:max-w-[425px] z-[60]">
+                    <DialogHeader>
+                        <DialogTitle>封禁玩家</DialogTitle>
+                        <DialogDescription>
+                            输入想封禁该玩家此时长 (单位: 分钟)。输入 0 即代表永久封禁。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">时长 (分钟)</Label>
+                            <Input
+                                type="number"
+                                value={banDuration}
+                                onChange={(e) => setBanDuration(parseInt(e.target.value) || 0)}
+                                className="col-span-3"
+                                placeholder="0 for permanent"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setBanPlayerUserid(null)}>取消</Button>
+                        <Button onClick={submitBanPlayer} className="bg-red-600 hover:bg-red-700 text-white">确定封禁</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

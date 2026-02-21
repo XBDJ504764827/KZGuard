@@ -143,11 +143,11 @@ pub async fn apply_whitelist(
     }
 
     let result = sqlx::query(
-        "INSERT INTO whitelist (steam_id, steam_id_3, steam_id_64, name, status) VALUES (?, ?, ?, ?, 'pending')",
+        "INSERT INTO whitelist (steam_id, steam_id_64, steam_id_3, name, status) VALUES (?, ?, ?, ?, 'pending')",
     )
     .bind(&steam_id_2)
-    .bind(&steam_id_3)
     .bind(&steam_id_64)
+    .bind(&steam_id_3)
     .bind(&payload.name)
     .execute(&state.db)
     .await;
@@ -199,11 +199,11 @@ pub async fn create_whitelist(
 
 
     let result = sqlx::query(
-        "INSERT INTO whitelist (steam_id, steam_id_3, steam_id_64, name, status, admin_name) VALUES (?, ?, ?, ?, 'approved', ?)",
+        "INSERT INTO whitelist (steam_id, steam_id_64, steam_id_3, name, status, admin_name) VALUES (?, ?, ?, ?, 'approved', ?)",
     )
     .bind(&steam_id_2)
-    .bind(&steam_id_3)
     .bind(&steam_id_64)
+    .bind(&steam_id_3)
     .bind(&payload.name)
     .bind(&user.sub)
     .execute(&state.db)

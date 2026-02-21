@@ -37,6 +37,9 @@ export default function LoginPage() {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem('token', data.token);
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
         router.push('/admin/community');
       } else {
         setErrorMsg('Authentication successful but no token received.');

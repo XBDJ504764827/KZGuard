@@ -117,6 +117,25 @@ pub async fn update_admin(
     Path(id): Path<i64>,
     Json(payload): Json<UpdateAdminRequest>,
 ) -> impl IntoResponse {
+    let row = sqlx::query_as::<_, crate::models::user::Admin>("SELECT * FROM admins WHERE id = ?")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await;
+
+    let target_admin = match row {
+        Ok(Some(a)) => a,
+        Ok(None) => return (StatusCode::NOT_FOUND, Json("Admin not found")).into_response(),
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    if user.role != "super_admin" && user.sub != target_admin.username {
+        return (StatusCode::FORBIDDEN, Json("You do not have permission to modify this admin")).into_response();
+    }
+
+    if user.role != "super_admin" && (payload.role.is_some() || payload.username.is_some()) {
+        return (StatusCode::FORBIDDEN, Json("Only super_admins can change roles or usernames")).into_response();
+    }
+
     if let Some(username) = payload.username {
         let _ = sqlx::query("UPDATE admins SET username = ? WHERE id = ?")
             .bind(username).bind(id)
@@ -186,6 +205,10 @@ pub async fn delete_admin(
     Extension(user): Extension<Claims>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
+    if user.role != "super_admin" {
+        return (StatusCode::FORBIDDEN, Json("Only super_admins can delete admins")).into_response();
+    }
+
     let result = sqlx::query("DELETE FROM admins WHERE id = ?")
         .bind(id)
         .execute(&state.db)

@@ -17,6 +17,7 @@ import {
     Key,
     ExternalLink
 } from 'lucide-react';
+import { Toaster } from '@/components/ui/sonner';
 
 const navigation = [
     { name: '社区组管理', href: '/admin/community', icon: Users },
@@ -183,6 +184,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     onClick={() => setSidebarOpen(false)}
                 ></div>
             )}
+
+            <Toaster position="top-center" />
         </div>
     );
 }
